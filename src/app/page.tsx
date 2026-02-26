@@ -45,7 +45,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-900 flex flex-col items-center justify-center p-4">
+    <div className="wordle-viewport min-h-dvh bg-zinc-900 flex flex-col items-center justify-center p-4">
       <div className="text-center mb-12">
         <h1 className="text-6xl font-bold text-white mb-4">
           <span className="text-green-500">W</span>
@@ -98,6 +98,9 @@ export default function Home() {
             onChange={(e) => setPlayerName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             maxLength={20}
+            autoCapitalize="words"
+            autoCorrect="off"
+            spellCheck={false}
             className="w-full px-4 py-3 rounded-lg bg-zinc-700 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-green-500 mb-4"
             autoFocus
           />
@@ -131,6 +134,9 @@ export default function Home() {
             value={playerName}
             onChange={(e) => setPlayerName(e.target.value)}
             maxLength={20}
+            autoCapitalize="words"
+            autoCorrect="off"
+            spellCheck={false}
             className="w-full px-4 py-3 rounded-lg bg-zinc-700 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
             autoFocus
           />
@@ -141,6 +147,10 @@ export default function Home() {
             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
             onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
             maxLength={6}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            inputMode="text"
             className="w-full px-4 py-3 rounded-lg bg-zinc-700 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 font-mono text-center text-xl tracking-wider"
           />
           <button

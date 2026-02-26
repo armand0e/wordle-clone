@@ -34,8 +34,8 @@ export default function PlayerList({ players, currentPlayerId, hostId }: PlayerL
               player.id === currentPlayerId ? 'bg-zinc-700' : 'bg-zinc-900'
             }`}
           >
-            <div className="flex items-center gap-2">
-              <span className="text-white font-medium">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-white font-medium">
                 {player.name}
                 {player.id === currentPlayerId && ' (You)'}
                 {player.id === hostId && ' 👑'}

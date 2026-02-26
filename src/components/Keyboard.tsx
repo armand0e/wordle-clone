@@ -24,6 +24,12 @@ const stateColors: Record<LetterState | 'default', string> = {
 };
 
 export default function Keyboard({ keyStates, onKeyPress, disabled = false }: KeyboardProps) {
+  const keyLabel = (key: string) => {
+    if (key === '⌫') return 'Backspace';
+    if (key === 'ENTER') return 'Enter';
+    return key;
+  };
+
   const handleClick = (key: string) => {
     if (disabled) return;
     if (key === '⌫') {
@@ -36,23 +42,25 @@ export default function Keyboard({ keyStates, onKeyPress, disabled = false }: Ke
   };
 
   return (
-    <div className="flex flex-col items-center gap-1.5">
+    <div className="flex w-full max-w-[min(34rem,100%)] flex-col items-center gap-1.5 select-none">
       {keyboardRows.map((row, rowIndex) => (
-        <div key={rowIndex} className="flex gap-1.5">
+        <div key={rowIndex} className="flex w-full justify-center gap-1.5">
           {row.map((key) => {
             const state = keyStates[key] || 'default';
             const isWide = key === 'ENTER' || key === '⌫';
 
             return (
               <button
+                type="button"
                 key={key}
                 onClick={() => handleClick(key)}
                 disabled={disabled}
+                aria-label={keyLabel(key)}
                 className={`${
                   isWide
                     ? 'px-3 min-w-[calc(var(--tile-size)*1.45)]'
                     : 'w-[calc(var(--tile-size)*0.72)]'
-                } h-(--key-height) rounded font-bold text-white text-[clamp(0.65rem,2.2vw,0.95rem)] uppercase transition-colors ${
+                } h-(--key-height) rounded font-bold text-white text-[clamp(0.65rem,2.2vw,0.95rem)] uppercase transition-colors touch-manipulation ${
                   stateColors[state]
                 } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer active:scale-95'}`}
               >

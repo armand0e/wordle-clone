@@ -22,10 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 WORDLIST_PATH = PROJECT_ROOT / "src" / "lib" / "official-wordlists.json"
 
 SCOWL_URLS = [
-    "https://raw.githubusercontent.com/en-wl/wordlist-diff/diff/en_US-large.txt",
-    "https://raw.githubusercontent.com/en-wl/wordlist-diff/diff/en_GB-large.txt",
-    "https://raw.githubusercontent.com/en-wl/wordlist-diff/diff/en_CA-large.txt",
-    "https://raw.githubusercontent.com/en-wl/wordlist-diff/diff/en_AU-large.txt",
+    "https://raw.githubusercontent.com/en-wl/wordlist-diff/diff/en_US-large.txt"
 ]
 
 FIVE_LETTER_ASCII = re.compile(r"^[A-Za-z]{5}$")

@@ -10,14 +10,39 @@
   --wordle-key-default-hover: #6f7072;
   --wordle-border-empty: #3a3a3c;
   --wordle-border-active: #565758;
-  --tile-size: clamp(2.55rem, min(7.4vh, 12vw), 3.6rem);
-  --key-height: clamp(2.55rem, 6.4vh, 3.5rem);
+  --tile-size: clamp(2.2rem, min(7.2vh, 12vw), 3.6rem);
+  --key-height: clamp(2.15rem, 6vh, 3.4rem);
 }
 
 body {
   background: var(--wordle-bg);
   color: var(--wordle-text);
   font-family: "Clear Sans", "Helvetica Neue", Arial, sans-serif;
+  overscroll-behavior-y: contain;
+}
+
+.wordle-viewport {
+  min-height: 100dvh;
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+.wordle-toast {
+  top: max(0.75rem, env(safe-area-inset-top));
+}
+
+@media (max-height: 780px) {
+  :root {
+    --tile-size: clamp(2rem, min(6.4vh, 11vw), 3.2rem);
+    --key-height: clamp(1.95rem, 5.4vh, 2.9rem);
+  }
+}
+
+@media (max-height: 680px) {
+  :root {
+    --tile-size: clamp(1.75rem, min(5.8vh, 10vw), 2.7rem);
+    --key-height: clamp(1.7rem, 4.8vh, 2.35rem);
+  }
 }
 
 @keyframes shake {
@@ -59,4 +84,18 @@ body {
   backface-visibility: hidden;
   transform-style: preserve-3d;
   will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-shake,
+  .animate-flip,
+  .animate-pop {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .wordle-tile,
+  button {
+    transition-duration: 0.01ms !important;
+  }
 }

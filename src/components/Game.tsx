@@ -18,6 +18,7 @@ export default function Game() {
   const [isRevealing, setIsRevealing] = useState(false);
   const [isSubmittingRematch, setIsSubmittingRematch] = useState(false);
   const lastGuessCountRef = useRef(0);
+  const shakeTimeoutRef = useRef<number | undefined>(undefined);
 
   const currentPlayer = useMemo(
     () => room?.players.find((player) => player.id === playerId) ?? null,
@@ -129,8 +130,11 @@ export default function Game() {
           return;
         }
 
+        if (shakeTimeoutRef.current) {
+          window.clearTimeout(shakeTimeoutRef.current);
+        }
         setShake(true);
-        setTimeout(() => setShake(false), 500);
+        shakeTimeoutRef.current = window.setTimeout(() => setShake(false), 500);
       });
     } else if (key === 'Backspace') {
       clearError();
@@ -141,18 +145,33 @@ export default function Game() {
     }
   }, [currentGuess, canType, submitGuess, clearError]);
 
+  useEffect(() => {
+    return () => {
+      if (shakeTimeoutRef.current) {
+        window.clearTimeout(shakeTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handlePlayAgain = useCallback(async () => {
     if (!currentPlayer || currentPlayer.readyForNextRound || isSubmittingRematch) {
       return;
     }
 
     setIsSubmittingRematch(true);
-    await playAgain();
-    setIsSubmittingRematch(false);
+    try {
+      await playAgain();
+    } finally {
+      setIsSubmittingRematch(false);
+    }
   }, [currentPlayer, playAgain, isSubmittingRematch]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.isContentEditable || target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') {
+        return;
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       handleKeyPress(e.key);
     };
@@ -166,14 +185,18 @@ export default function Game() {
   }
 
   return (
-    <div className="relative mx-auto flex h-dvh w-full max-w-6xl flex-col overflow-hidden px-3 py-4 sm:px-4 sm:py-5">
+    <div className="wordle-viewport relative mx-auto flex w-full max-w-6xl flex-col overflow-y-auto overflow-x-hidden px-3 sm:px-4">
       {error && (
-        <div className="pointer-events-none fixed top-4 left-1/2 z-40 -translate-x-1/2 rounded-md bg-white px-4 py-2 text-sm font-semibold text-black shadow-lg">
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="wordle-toast pointer-events-none fixed left-1/2 z-40 -translate-x-1/2 rounded-md bg-white px-4 py-2 text-sm font-semibold text-black shadow-lg"
+        >
           {error}
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 items-stretch justify-center gap-4 lg:gap-8">
+      <div className="flex min-h-0 flex-1 items-stretch justify-center gap-3 py-3 lg:gap-8">
         {otherPlayers.length > 0 && (
           <div className="hidden lg:flex flex-col gap-3 pt-2">
             <h3 className="text-white font-bold text-sm">Other Players</h3>
@@ -188,8 +211,8 @@ export default function Game() {
           </div>
         )}
 
-        <div className="flex min-h-0 w-full max-w-xl flex-1 flex-col items-center justify-between gap-4">
-          <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-3">
+        <div className="flex min-h-0 w-full max-w-xl flex-1 flex-col items-center justify-between gap-3">
+          <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-start gap-3 sm:justify-center">
             {hasFinished && !isRevealing && currentPlayer.gameStatus === 'won' && (
               <div className="rounded-lg bg-green-600 px-4 py-2 text-center text-lg font-bold text-white">
                 🎉 You Won! 🎉
@@ -201,7 +224,7 @@ export default function Game() {
               </div>
             )}
 
-            <div className={shake ? 'animate-shake' : ''}>
+            <div className={`${shake ? 'animate-shake' : ''} px-1`}>
               <Grid
                 guessResults={guessResults}
                 currentGuess={currentGuess}
@@ -219,11 +242,11 @@ export default function Game() {
           />
 
           {hasFinished && !isRevealing && (
-            <div className="mb-1 flex flex-col items-center gap-3">
+            <div className="mb-1 flex flex-col items-center gap-3 pb-1">
               <p className="text-sm text-zinc-300">
                 {readyPlayers}/{room.players.length} players ready to play again
               </p>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-center gap-3">
                 <button
                   onClick={handlePlayAgain}
                   disabled={currentPlayer.readyForNextRound || isSubmittingRematch}

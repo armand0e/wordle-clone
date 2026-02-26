@@ -34,7 +34,7 @@ export default function RoomPage() {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-zinc-900 flex items-center justify-center">
+      <div className="wordle-viewport min-h-dvh bg-zinc-900 flex items-center justify-center">
         <div className="text-white text-xl">Connecting...</div>
       </div>
     );
@@ -42,7 +42,7 @@ export default function RoomPage() {
 
   if (!hasJoined) {
     return (
-      <div className="min-h-screen bg-zinc-900 flex items-center justify-center">
+      <div className="wordle-viewport min-h-dvh bg-zinc-900 flex items-center justify-center p-4">
         <div className="bg-zinc-800 rounded-lg p-8 max-w-md w-full mx-4">
           <h1 className="text-3xl font-bold text-white mb-2 text-center">Join Room</h1>
           <p className="text-zinc-400 text-center mb-6">Room: {roomId}</p>
@@ -60,6 +60,9 @@ export default function RoomPage() {
             onChange={(e) => setPlayerName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
             maxLength={20}
+            autoCapitalize="words"
+            autoCorrect="off"
+            spellCheck={false}
             className="w-full px-4 py-3 rounded-lg bg-zinc-700 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-green-500 mb-4"
           />
 
@@ -88,14 +91,14 @@ export default function RoomPage() {
 
   if (!room) {
     return (
-      <div className="min-h-screen bg-zinc-900 flex items-center justify-center">
+      <div className="wordle-viewport min-h-dvh bg-zinc-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading room...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-900">
+    <div className="min-h-dvh bg-zinc-900">
       {room.gameStarted ? <Game /> : <Lobby />}
     </div>
   );
