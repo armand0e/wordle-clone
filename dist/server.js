@@ -17,10 +17,23 @@ const handler = app.getRequestHandler();
 const rooms = new Map();
 const playerRooms = new Map(); // socketId -> roomId
 const guessSubmitLocks = new Set();
-function toClientRoom(room) {
+function toClientRoomForPlayer(room, viewerId) {
+    const viewer = room.players.find((player) => player.id === viewerId);
+    const canViewOthersLiveBoards = viewer?.gameStatus === 'won';
     return {
         ...room,
         targetWord: null,
+        players: room.players.map((player) => {
+            if (player.id === viewerId || canViewOthersLiveBoards) {
+                return { ...player };
+            }
+            return {
+                ...player,
+                guesses: [],
+                currentGuess: '',
+                guessResults: [],
+            };
+        }),
     };
 }
 function startRound(room) {
@@ -44,6 +57,11 @@ app.prepare().then(() => {
             methods: ['GET', 'POST'],
         },
     });
+    const emitRoomState = (room) => {
+        room.players.forEach((player) => {
+            io.to(player.id).emit('roomState', toClientRoomForPlayer(room, player.id));
+        });
+    };
     io.on('connection', (socket) => {
         console.log('Client connected:', socket.id);
         socket.on('createRoom', (playerName, callback) => {
@@ -74,7 +92,7 @@ app.prepare().then(() => {
             socket.join(roomId);
             console.log(`Room ${roomId} created by ${player.name}`);
             callback(roomId);
-            socket.emit('roomState', toClientRoom(room));
+            emitRoomState(room);
         });
         socket.on('joinRoom', (roomId, playerName, callback) => {
             handleDisconnect(socket.id);
@@ -101,7 +119,7 @@ app.prepare().then(() => {
             socket.join(roomId.toUpperCase());
             console.log(`${player.name} joined room ${roomId}`);
             callback(true);
-            io.to(roomId.toUpperCase()).emit('roomState', toClientRoom(room));
+            emitRoomState(room);
         });
         socket.on('startGame', () => {
             const roomId = playerRooms.get(socket.id);
@@ -120,7 +138,7 @@ app.prepare().then(() => {
             }
             startRound(room);
             console.log(`Game started in room ${roomId}, word: ${room.targetWord}`);
-            io.to(roomId).emit('roomState', toClientRoom(room));
+            emitRoomState(room);
         });
         socket.on('updateCurrentGuess', (guess) => {
             const roomId = playerRooms.get(socket.id);
@@ -142,7 +160,7 @@ app.prepare().then(() => {
                 return;
             }
             player.currentGuess = normalizedGuess;
-            io.to(roomId).emit('roomState', toClientRoom(room));
+            emitRoomState(room);
         });
         socket.on('playAgain', (callback) => {
             const roomId = playerRooms.get(socket.id);
@@ -165,11 +183,11 @@ app.prepare().then(() => {
                 return;
             }
             player.readyForNextRound = true;
-            io.to(roomId).emit('roomState', toClientRoom(room));
+            emitRoomState(room);
             const everyoneReady = room.players.length > 0 && room.players.every((p) => p.readyForNextRound);
             if (everyoneReady) {
                 startRound(room);
-                io.to(roomId).emit('roomState', toClientRoom(room));
+                emitRoomState(room);
             }
             callback(true);
         });
@@ -223,7 +241,7 @@ app.prepare().then(() => {
                 io.to(roomId).emit('playerLost', socket.id);
                 socket.emit('wordRevealed', room.targetWord);
             }
-            io.to(roomId).emit('roomState', toClientRoom(room));
+            emitRoomState(room);
         });
         socket.on('leaveRoom', () => {
             handleDisconnect(socket.id);
@@ -252,7 +270,7 @@ app.prepare().then(() => {
                 if (room.hostId === socketId) {
                     room.hostId = room.players[0].id;
                 }
-                io.to(roomId).emit('roomState', toClientRoom(room));
+                emitRoomState(room);
                 io.to(roomId).emit('playerLeft', socketId);
             }
         }

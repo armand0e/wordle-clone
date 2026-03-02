@@ -17,10 +17,25 @@ const rooms: Map<string, Room> = new Map();
 const playerRooms: Map<string, string> = new Map(); // socketId -> roomId
 const guessSubmitLocks: Set<string> = new Set();
 
-function toClientRoom(room: Room): Room {
+function toClientRoomForPlayer(room: Room, viewerId: string): Room {
+  const viewer = room.players.find((player) => player.id === viewerId);
+  const canViewOthersLiveBoards = viewer?.gameStatus === 'won';
+
   return {
     ...room,
     targetWord: null,
+    players: room.players.map((player) => {
+      if (player.id === viewerId || canViewOthersLiveBoards) {
+        return { ...player };
+      }
+
+      return {
+        ...player,
+        guesses: [],
+        currentGuess: '',
+        guessResults: [],
+      };
+    }),
   };
 }
 
@@ -48,6 +63,12 @@ app.prepare().then(() => {
       methods: ['GET', 'POST'],
     },
   });
+
+  const emitRoomState = (room: Room) => {
+    room.players.forEach((player) => {
+      io.to(player.id).emit('roomState', toClientRoomForPlayer(room, player.id));
+    });
+  };
 
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
@@ -85,7 +106,7 @@ app.prepare().then(() => {
 
       console.log(`Room ${roomId} created by ${player.name}`);
       callback(roomId);
-      socket.emit('roomState', toClientRoom(room));
+      emitRoomState(room);
     });
 
     socket.on('joinRoom', (roomId, playerName, callback) => {
@@ -120,7 +141,7 @@ app.prepare().then(() => {
       console.log(`${player.name} joined room ${roomId}`);
       callback(true);
 
-      io.to(roomId.toUpperCase()).emit('roomState', toClientRoom(room));
+      emitRoomState(room);
     });
 
     socket.on('startGame', () => {
@@ -143,7 +164,7 @@ app.prepare().then(() => {
       startRound(room);
 
       console.log(`Game started in room ${roomId}, word: ${room.targetWord}`);
-      io.to(roomId).emit('roomState', toClientRoom(room));
+      emitRoomState(room);
     });
 
     socket.on('updateCurrentGuess', (guess) => {
@@ -170,7 +191,7 @@ app.prepare().then(() => {
       }
 
       player.currentGuess = normalizedGuess;
-      io.to(roomId).emit('roomState', toClientRoom(room));
+      emitRoomState(room);
     });
 
     socket.on('playAgain', (callback) => {
@@ -198,12 +219,12 @@ app.prepare().then(() => {
       }
 
       player.readyForNextRound = true;
-      io.to(roomId).emit('roomState', toClientRoom(room));
+      emitRoomState(room);
 
       const everyoneReady = room.players.length > 0 && room.players.every((p) => p.readyForNextRound);
       if (everyoneReady) {
         startRound(room);
-        io.to(roomId).emit('roomState', toClientRoom(room));
+        emitRoomState(room);
       }
 
       callback(true);
@@ -268,7 +289,7 @@ app.prepare().then(() => {
         socket.emit('wordRevealed', room.targetWord);
       }
 
-      io.to(roomId).emit('roomState', toClientRoom(room));
+      emitRoomState(room);
     });
 
     socket.on('leaveRoom', () => {
@@ -302,7 +323,7 @@ app.prepare().then(() => {
         if (room.hostId === socketId) {
           room.hostId = room.players[0].id;
         }
-        io.to(roomId).emit('roomState', toClientRoom(room));
+        emitRoomState(room);
         io.to(roomId).emit('playerLeft', socketId);
       }
     }

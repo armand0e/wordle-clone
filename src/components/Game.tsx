@@ -80,11 +80,16 @@ export default function Game() {
   const isPlaying = currentPlayer?.gameStatus === 'playing';
   const hasFinished = currentPlayer?.gameStatus === 'won' || currentPlayer?.gameStatus === 'lost';
   const hasPendingReveal = revealingRowIndex !== null || revealedRows < guessResults.length;
+  const canSpectate = currentPlayer?.gameStatus === 'won';
   const canType = !isSpectating && isPlaying && !hasPendingReveal && !isSubmittingGuess;
   const readyPlayers = room?.players.filter((player) => player.readyForNextRound).length || 0;
 
   const startSpectating = useCallback(
     (targetPlayerId: string) => {
+      if (!canSpectate) {
+        return;
+      }
+
       const targetPlayer = otherPlayers.find((player) => player.id === targetPlayerId);
       if (!targetPlayer) {
         return;
@@ -97,7 +102,7 @@ export default function Game() {
       setSpectatedRevealingTiles(0);
       setSpectatedPlayerId(targetPlayerId);
     },
-    [otherPlayers],
+    [canSpectate, otherPlayers],
   );
 
   useEffect(() => {
@@ -105,11 +110,16 @@ export default function Game() {
       return;
     }
 
+    if (!canSpectate) {
+      setSpectatedPlayerId(null);
+      return;
+    }
+
     const stillExists = room?.players.some((player) => player.id === spectatedPlayerId && player.id !== playerId);
     if (!stillExists) {
       setSpectatedPlayerId(null);
     }
-  }, [room, playerId, spectatedPlayerId]);
+  }, [canSpectate, room, playerId, spectatedPlayerId]);
 
   useEffect(() => {
     const nextCount = spectatedGuessResults.length;
@@ -359,7 +369,12 @@ export default function Game() {
       <div className="flex min-h-0 flex-1 items-stretch justify-center gap-3 py-3 lg:gap-8">
         {otherPlayers.length > 0 && (
           <div className="hidden lg:flex flex-col gap-3 pt-2">
-            <h3 className="text-white font-bold text-sm">Other Players</h3>
+            <div className="space-y-1">
+              <h3 className="text-white font-bold text-sm">Other Players</h3>
+              {!canSpectate && (
+                <p className="text-xs text-zinc-400">Spectate unlocks after you win this round.</p>
+              )}
+            </div>
             {otherPlayers.map(player => (
               <MiniGrid
                 key={player.id}
@@ -367,7 +382,7 @@ export default function Game() {
                 currentGuess={player.currentGuess}
                 playerName={player.name}
                 gameStatus={player.gameStatus}
-                onSelect={() => startSpectating(player.id)}
+                onSelect={canSpectate ? () => startSpectating(player.id) : undefined}
                 isSelected={player.id === spectatedPlayerId}
               />
             ))}
@@ -448,6 +463,9 @@ export default function Game() {
 
           {otherPlayers.length > 0 && (
             <div className="lg:hidden flex flex-wrap justify-center gap-2 pt-1">
+              {!canSpectate && (
+                <p className="w-full text-center text-xs text-zinc-400">Spectate unlocks after you win this round.</p>
+              )}
               {otherPlayers.map(player => (
                 <MiniGrid
                   key={player.id}
@@ -455,7 +473,7 @@ export default function Game() {
                   currentGuess={player.currentGuess}
                   playerName={player.name}
                   gameStatus={player.gameStatus}
-                  onSelect={() => startSpectating(player.id)}
+                  onSelect={canSpectate ? () => startSpectating(player.id) : undefined}
                   isSelected={player.id === spectatedPlayerId}
                 />
               ))}
