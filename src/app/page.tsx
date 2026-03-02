@@ -47,13 +47,15 @@ export default function Home() {
   return (
     <div className="wordle-viewport min-h-dvh bg-zinc-900 flex flex-col items-center justify-center p-4">
       <div className="text-center mb-12">
-        <h1 className="text-6xl font-bold text-white mb-4">
-          <span className="text-green-500">W</span>
-          <span className="text-yellow-500">O</span>
-          <span className="text-green-500">R</span>
-          <span className="text-zinc-400">D</span>
-          <span className="text-yellow-500">L</span>
-          <span className="text-green-500">E</span>
+        <h1 className="mb-4 flex justify-center gap-1.5" aria-label="WORDLE">
+          {['W', 'O', 'R', 'D', 'L', 'E'].map((letter) => (
+            <span
+              key={letter}
+              className="flex h-11 w-11 items-center justify-center border-2 border-(--wordle-border-empty) bg-transparent text-2xl font-bold text-white sm:h-12 sm:w-12 sm:text-3xl"
+            >
+              {letter}
+            </span>
+          ))}
         </h1>
         <h2 className="text-2xl text-zinc-400 font-medium">Party Mode</h2>
         <p className="text-zinc-500 mt-2">Play Wordle with your friends!</p>

@@ -16,6 +16,7 @@ const app = (0, next_1.default)({ dev, hostname, port });
 const handler = app.getRequestHandler();
 const rooms = new Map();
 const playerRooms = new Map(); // socketId -> roomId
+const guessSubmitLocks = new Set();
 function toClientRoom(room) {
     return {
         ...room,
@@ -80,10 +81,6 @@ app.prepare().then(() => {
                 callback(false, 'Room not found');
                 return;
             }
-            if (room.gameStarted) {
-                callback(false, 'Game already started');
-                return;
-            }
             if (room.players.length >= 8) {
                 callback(false, 'Room is full');
                 return;
@@ -94,7 +91,7 @@ app.prepare().then(() => {
                 guesses: [],
                 gameStatus: 'waiting',
                 guessResults: [],
-                readyForNextRound: false,
+                readyForNextRound: room.gameStarted,
             };
             room.players.push(player);
             playerRooms.set(socket.id, roomId.toUpperCase());
@@ -112,6 +109,10 @@ app.prepare().then(() => {
                 return;
             if (room.hostId !== socket.id) {
                 socket.emit('error', 'Only the host can start the game');
+                return;
+            }
+            if (room.gameStarted) {
+                socket.emit('error', 'Game already in progress');
                 return;
             }
             startRound(room);
@@ -172,6 +173,14 @@ app.prepare().then(() => {
                 callback(false, 'Not in word list');
                 return;
             }
+            if (guessSubmitLocks.has(socket.id)) {
+                callback(true);
+                return;
+            }
+            guessSubmitLocks.add(socket.id);
+            setTimeout(() => {
+                guessSubmitLocks.delete(socket.id);
+            }, 250);
             const results = (0, game_1.evaluateGuess)(upperGuess, room.targetWord);
             player.guesses.push(upperGuess);
             player.guessResults.push(results);
@@ -198,6 +207,7 @@ app.prepare().then(() => {
             handleDisconnect(socket.id);
         });
         function handleDisconnect(socketId) {
+            guessSubmitLocks.delete(socketId);
             const roomId = playerRooms.get(socketId);
             if (!roomId)
                 return;

@@ -15,10 +15,11 @@ export default function Game() {
   const [revealedRows, setRevealedRows] = useState(0);
   const [revealingRowIndex, setRevealingRowIndex] = useState<number | null>(null);
   const [revealingTiles, setRevealingTiles] = useState(0);
-  const [isRevealing, setIsRevealing] = useState(false);
   const [isSubmittingRematch, setIsSubmittingRematch] = useState(false);
+  const [isSubmittingGuess, setIsSubmittingGuess] = useState(false);
   const lastGuessCountRef = useRef(0);
   const shakeTimeoutRef = useRef<number | undefined>(undefined);
+  const isSubmittingGuessRef = useRef(false);
 
   const currentPlayer = useMemo(
     () => room?.players.find((player) => player.id === playerId) ?? null,
@@ -39,7 +40,8 @@ export default function Game() {
   const keyStates = getKeyboardState(visibleGuessResults);
   const isPlaying = currentPlayer?.gameStatus === 'playing';
   const hasFinished = currentPlayer?.gameStatus === 'won' || currentPlayer?.gameStatus === 'lost';
-  const canType = isPlaying && !isRevealing;
+  const hasPendingReveal = revealingRowIndex !== null || revealedRows < guessResults.length;
+  const canType = isPlaying && !hasPendingReveal && !isSubmittingGuess;
   const readyPlayers = room?.players.filter((player) => player.readyForNextRound).length || 0;
 
   useEffect(() => {
@@ -58,7 +60,6 @@ export default function Game() {
         setRevealedRows(0);
         setRevealingRowIndex(null);
         setRevealingTiles(0);
-        setIsRevealing(false);
       });
 
       return () => {
@@ -73,7 +74,6 @@ export default function Game() {
         setRevealedRows(nextCount);
         setRevealingRowIndex(null);
         setRevealingTiles(0);
-        setIsRevealing(false);
       });
 
       return () => {
@@ -90,7 +90,6 @@ export default function Game() {
     const startFrame = scheduleStateUpdate(() => {
       setRevealingRowIndex(nextCount - 1);
       setRevealingTiles(0);
-      setIsRevealing(true);
     });
 
     let revealed = 0;
@@ -105,7 +104,6 @@ export default function Game() {
           setRevealedRows(nextCount);
           setRevealingRowIndex(null);
           setRevealingTiles(0);
-          setIsRevealing(false);
         }, 140);
       }
     }, 250);
@@ -123,19 +121,32 @@ export default function Game() {
     if (!canType) return;
 
     if (key === 'Enter') {
-      submitGuess(currentGuess).then((result) => {
-        if (result.success) {
-          setCurrentGuess('');
-          clearError();
-          return;
-        }
+      if (currentGuess.length !== 5 || isSubmittingGuessRef.current) {
+        return;
+      }
 
-        if (shakeTimeoutRef.current) {
-          window.clearTimeout(shakeTimeoutRef.current);
-        }
-        setShake(true);
-        shakeTimeoutRef.current = window.setTimeout(() => setShake(false), 500);
-      });
+      const guessToSubmit = currentGuess;
+      isSubmittingGuessRef.current = true;
+      setIsSubmittingGuess(true);
+
+      submitGuess(guessToSubmit)
+        .then((result) => {
+          if (result.success) {
+            setCurrentGuess('');
+            clearError();
+            return;
+          }
+
+          if (shakeTimeoutRef.current) {
+            window.clearTimeout(shakeTimeoutRef.current);
+          }
+          setShake(true);
+          shakeTimeoutRef.current = window.setTimeout(() => setShake(false), 500);
+        })
+        .finally(() => {
+          isSubmittingGuessRef.current = false;
+          setIsSubmittingGuess(false);
+        });
     } else if (key === 'Backspace') {
       clearError();
       setCurrentGuess(prev => prev.slice(0, -1));
@@ -150,6 +161,7 @@ export default function Game() {
       if (shakeTimeoutRef.current) {
         window.clearTimeout(shakeTimeoutRef.current);
       }
+      isSubmittingGuessRef.current = false;
     };
   }, []);
 
@@ -169,7 +181,15 @@ export default function Game() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target?.isContentEditable || target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') {
+      if (
+        target?.isContentEditable ||
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.tagName === 'BUTTON'
+      ) {
+        return;
+      }
+      if (e.key === 'Enter' && e.repeat) {
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -213,12 +233,12 @@ export default function Game() {
 
         <div className="flex min-h-0 w-full max-w-xl flex-1 flex-col items-center justify-between gap-3">
           <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-start gap-3 sm:justify-center">
-            {hasFinished && !isRevealing && currentPlayer.gameStatus === 'won' && (
+            {hasFinished && !hasPendingReveal && currentPlayer.gameStatus === 'won' && (
               <div className="rounded-lg bg-green-600 px-4 py-2 text-center text-lg font-bold text-white">
                 🎉 You Won! 🎉
               </div>
             )}
-            {hasFinished && !isRevealing && currentPlayer.gameStatus === 'lost' && (
+            {hasFinished && !hasPendingReveal && currentPlayer.gameStatus === 'lost' && (
               <div className="rounded-lg bg-red-600 px-4 py-2 text-center text-lg font-bold text-white">
                 😢 Game Over - The word was: {revealedWord || '?????'}
               </div>
@@ -241,7 +261,7 @@ export default function Game() {
             disabled={!canType}
           />
 
-          {hasFinished && !isRevealing && (
+          {hasFinished && !hasPendingReveal && (
             <div className="mb-1 flex flex-col items-center gap-3 pb-1">
               <p className="text-sm text-zinc-300">
                 {readyPlayers}/{room.players.length} players ready to play again

@@ -21,6 +21,11 @@ export default function RoomPage() {
     return false;
   }, [room, playerId]);
 
+  const currentPlayer = useMemo(() => {
+    if (!room || !playerId) return null;
+    return room.players.find((player) => player.id === playerId) || null;
+  }, [room, playerId]);
+
   const handleJoin = async () => {
     if (!playerName.trim()) return;
     clearError();
@@ -99,7 +104,7 @@ export default function RoomPage() {
 
   return (
     <div className="min-h-dvh bg-zinc-900">
-      {room.gameStarted ? <Game /> : <Lobby />}
+      {room.gameStarted && currentPlayer?.gameStatus !== 'waiting' ? <Game /> : <Lobby />}
     </div>
   );
 }
