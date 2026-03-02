@@ -112,7 +112,7 @@ export default function MiniGrid({
     : '';
 
   const containerClasses = [
-    'bg-zinc-800 rounded-lg p-3 text-left',
+    'w-fit bg-zinc-800 rounded-lg p-3 text-left',
     isCurrentPlayer ? 'ring-2 ring-blue-500' : '',
     isSelected ? 'ring-2 ring-yellow-400' : '',
     onSelect ? 'cursor-pointer transition-colors hover:bg-zinc-700/80' : '',
@@ -126,11 +126,11 @@ export default function MiniGrid({
         </span>
         <span>{statusIcon}</span>
       </div>
-      <div className="grid gap-0.5">
+      <div className="grid w-fit gap-0.5">
         {Array.from({ length: 6 }).map((_, rowIndex) => {
           const guess = guessResults[rowIndex];
           return (
-            <div key={rowIndex} className="grid grid-cols-5 gap-0.5">
+            <div key={rowIndex} className="grid w-fit grid-cols-5 gap-0.5">
               {Array.from({ length: 5 }).map((_, colIndex) => {
                 const result = guess?.[colIndex];
                 const isCurrentGuessRow = rowIndex === guessResults.length && rowIndex < 6;

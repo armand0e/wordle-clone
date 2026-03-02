@@ -29,11 +29,15 @@ function toClientRoomForPlayer(room: Room, viewerId: string): Room {
         return { ...player };
       }
 
+      const maskedGuessResults = player.guessResults.map((row) =>
+        row.map(() => ({ letter: '', state: 'tbd' as const })),
+      );
+
       return {
         ...player,
-        guesses: [],
-        currentGuess: '',
-        guessResults: [],
+        guesses: player.guesses.map(() => '*****'),
+        currentGuess: '*'.repeat(player.currentGuess.length),
+        guessResults: maskedGuessResults,
       };
     }),
   };
