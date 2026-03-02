@@ -105,9 +105,9 @@ app.prepare().then(() => {
         id: socket.id,
         name: playerName.trim().slice(0, 20) || 'Player',
         guesses: [],
-        gameStatus: 'waiting',
+        gameStatus: room.gameStarted ? 'playing' : 'waiting',
         guessResults: [],
-        readyForNextRound: room.gameStarted,
+        readyForNextRound: false,
       };
 
       room.players.push(player);
