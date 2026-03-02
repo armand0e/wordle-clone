@@ -19,7 +19,7 @@ const playerRooms = new Map(); // socketId -> roomId
 const guessSubmitLocks = new Set();
 function toClientRoomForPlayer(room, viewerId) {
     const viewer = room.players.find((player) => player.id === viewerId);
-    const canViewOthersLiveBoards = viewer?.gameStatus === 'won';
+    const canViewOthersLiveBoards = viewer?.gameStatus === 'won' || viewer?.gameStatus === 'lost';
     return {
         ...room,
         targetWord: null,

@@ -19,7 +19,7 @@ const guessSubmitLocks: Set<string> = new Set();
 
 function toClientRoomForPlayer(room: Room, viewerId: string): Room {
   const viewer = room.players.find((player) => player.id === viewerId);
-  const canViewOthersLiveBoards = viewer?.gameStatus === 'won';
+  const canViewOthersLiveBoards = viewer?.gameStatus === 'won' || viewer?.gameStatus === 'lost';
 
   return {
     ...room,

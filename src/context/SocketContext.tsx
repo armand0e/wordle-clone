@@ -63,10 +63,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     const onRoomState = (newRoom: Room) => {
       setRoom(newRoom);
-      const roundReset = newRoom.players.some(
-        (player) => player.gameStatus === 'playing' && player.guesses.length === 0,
-      );
-      if (!newRoom.gameStarted || roundReset) {
+      if (!newRoom.gameStarted) {
         setRevealedWord(null);
       }
     };
@@ -153,7 +150,6 @@ export function SocketProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        setRevealedWord(null);
         resolve({ success: true });
       });
     });

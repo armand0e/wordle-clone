@@ -80,7 +80,7 @@ export default function Game() {
   const isPlaying = currentPlayer?.gameStatus === 'playing';
   const hasFinished = currentPlayer?.gameStatus === 'won' || currentPlayer?.gameStatus === 'lost';
   const hasPendingReveal = revealingRowIndex !== null || revealedRows < guessResults.length;
-  const canSpectate = currentPlayer?.gameStatus === 'won';
+  const canSpectate = hasFinished && !hasPendingReveal;
   const canType = !isSpectating && isPlaying && !hasPendingReveal && !isSubmittingGuess;
   const readyPlayers = room?.players.filter((player) => player.readyForNextRound).length || 0;
 
