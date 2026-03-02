@@ -27,11 +27,12 @@ function toClientRoomForPlayer(room, viewerId) {
             if (player.id === viewerId || canViewOthersLiveBoards) {
                 return { ...player };
             }
+            const maskedGuessResults = player.guessResults.map((row) => row.map((result) => ({ letter: '', state: result.state })));
             return {
                 ...player,
-                guesses: [],
-                currentGuess: '',
-                guessResults: [],
+                guesses: player.guesses.map(() => '*****'),
+                currentGuess: '*'.repeat(player.currentGuess.length),
+                guessResults: maskedGuessResults,
             };
         }),
     };

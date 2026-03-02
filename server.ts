@@ -30,7 +30,7 @@ function toClientRoomForPlayer(room: Room, viewerId: string): Room {
       }
 
       const maskedGuessResults = player.guessResults.map((row) =>
-        row.map(() => ({ letter: '', state: 'tbd' as const })),
+        row.map((result) => ({ letter: '', state: result.state })),
       );
 
       return {

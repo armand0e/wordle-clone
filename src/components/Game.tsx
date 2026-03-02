@@ -369,12 +369,7 @@ export default function Game() {
       <div className="flex min-h-0 flex-1 items-stretch justify-center gap-3 py-3 lg:gap-8">
         {otherPlayers.length > 0 && (
           <div className="hidden lg:flex flex-col gap-3 pt-2">
-            <div className="space-y-1">
-              <h3 className="text-white font-bold text-sm">Other Players</h3>
-              {!canSpectate && (
-                <p className="text-xs text-zinc-400">Spectate unlocks after you win this round.</p>
-              )}
-            </div>
+            <h3 className="text-white font-bold text-sm">Other Players</h3>
             {otherPlayers.map(player => (
               <MiniGrid
                 key={player.id}
@@ -463,9 +458,6 @@ export default function Game() {
 
           {otherPlayers.length > 0 && (
             <div className="lg:hidden flex flex-wrap justify-center gap-2 pt-1">
-              {!canSpectate && (
-                <p className="w-full text-center text-xs text-zinc-400">Spectate unlocks after you win this round.</p>
-              )}
               {otherPlayers.map(player => (
                 <MiniGrid
                   key={player.id}
