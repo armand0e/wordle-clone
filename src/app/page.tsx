@@ -12,6 +12,15 @@ export default function Home() {
   const [mode, setMode] = useState<'menu' | 'create' | 'join'>('menu');
   const [isLoading, setIsLoading] = useState(false);
 
+  const titleTiles = [
+    { letter: 'W', stateClass: 'bg-[var(--wordle-correct)] border-[var(--wordle-correct)]' },
+    { letter: 'O', stateClass: 'bg-[var(--wordle-present)] border-[var(--wordle-present)]' },
+    { letter: 'R', stateClass: 'bg-[var(--wordle-absent)] border-[var(--wordle-absent)]' },
+    { letter: 'D', stateClass: 'bg-[var(--wordle-absent)] border-[var(--wordle-absent)]' },
+    { letter: 'L', stateClass: 'bg-[var(--wordle-present)] border-[var(--wordle-present)]' },
+    { letter: 'E', stateClass: 'bg-[var(--wordle-correct)] border-[var(--wordle-correct)]' },
+  ];
+
   const handleCreate = async () => {
     if (!playerName.trim()) return;
     clearError();
@@ -48,12 +57,12 @@ export default function Home() {
     <div className="wordle-viewport min-h-dvh bg-zinc-900 flex flex-col items-center justify-center p-4">
       <div className="text-center mb-12">
         <h1 className="mb-4 flex justify-center gap-1.5" aria-label="WORDLE">
-          {['W', 'O', 'R', 'D', 'L', 'E'].map((letter) => (
+          {titleTiles.map((tile) => (
             <span
-              key={letter}
-              className="flex h-11 w-11 items-center justify-center border-2 border-(--wordle-border-empty) bg-transparent text-2xl font-bold text-white sm:h-12 sm:w-12 sm:text-3xl"
+              key={tile.letter}
+              className={`flex h-11 w-11 items-center justify-center border-2 text-2xl font-bold text-white sm:h-12 sm:w-12 sm:text-3xl ${tile.stateClass}`}
             >
-              {letter}
+              {tile.letter}
             </span>
           ))}
         </h1>
