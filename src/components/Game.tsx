@@ -9,15 +9,30 @@ import { getKeyboardState } from '@/lib/game';
 import { LetterResult } from '@/lib/types';
 
 export default function Game() {
-  const { room, playerId, submitGuess, playAgain, leaveRoom, error, revealedWord, clearError } = useSocket();
+  const {
+    room,
+    playerId,
+    updateCurrentGuess,
+    submitGuess,
+    playAgain,
+    leaveRoom,
+    error,
+    revealedWord,
+    clearError,
+  } = useSocket();
   const [currentGuess, setCurrentGuess] = useState('');
+  const [spectatedPlayerId, setSpectatedPlayerId] = useState<string | null>(null);
   const [shake, setShake] = useState(false);
   const [revealedRows, setRevealedRows] = useState(0);
   const [revealingRowIndex, setRevealingRowIndex] = useState<number | null>(null);
   const [revealingTiles, setRevealingTiles] = useState(0);
+  const [spectatedRevealedRows, setSpectatedRevealedRows] = useState(0);
+  const [spectatedRevealingRowIndex, setSpectatedRevealingRowIndex] = useState<number | null>(null);
+  const [spectatedRevealingTiles, setSpectatedRevealingTiles] = useState(0);
   const [isSubmittingRematch, setIsSubmittingRematch] = useState(false);
   const [isSubmittingGuess, setIsSubmittingGuess] = useState(false);
   const lastGuessCountRef = useRef(0);
+  const spectatedLastGuessCountRef = useRef(0);
   const shakeTimeoutRef = useRef<number | undefined>(undefined);
   const isSubmittingGuessRef = useRef(false);
 
@@ -25,10 +40,22 @@ export default function Game() {
     () => room?.players.find((player) => player.id === playerId) ?? null,
     [room, playerId],
   );
-  const otherPlayers = room?.players.filter(p => p.id !== playerId) || [];
+  const otherPlayers = useMemo(
+    () => room?.players.filter((player) => player.id !== playerId) || [],
+    [room, playerId],
+  );
+  const spectatedPlayer = useMemo(
+    () => otherPlayers.find((player) => player.id === spectatedPlayerId) ?? null,
+    [otherPlayers, spectatedPlayerId],
+  );
+  const isSpectating = Boolean(spectatedPlayer);
   const guessResults: LetterResult[][] = useMemo(
     () => currentPlayer?.guessResults || [],
     [currentPlayer],
+  );
+  const spectatedGuessResults: LetterResult[][] = useMemo(
+    () => spectatedPlayer?.guessResults || [],
+    [spectatedPlayer],
   );
   const visibleGuessResults = useMemo(() => {
     const visible = guessResults.slice(0, revealedRows);
@@ -37,12 +64,116 @@ export default function Game() {
     }
     return visible;
   }, [guessResults, revealedRows, revealingRowIndex, revealingTiles]);
-  const keyStates = getKeyboardState(visibleGuessResults);
+  const spectatedVisibleGuessResults = useMemo(() => {
+    const visible = spectatedGuessResults.slice(0, spectatedRevealedRows);
+    if (spectatedRevealingRowIndex !== null && spectatedGuessResults[spectatedRevealingRowIndex]) {
+      visible.push(spectatedGuessResults[spectatedRevealingRowIndex].slice(0, spectatedRevealingTiles));
+    }
+    return visible;
+  }, [spectatedGuessResults, spectatedRevealedRows, spectatedRevealingRowIndex, spectatedRevealingTiles]);
+  const activeGuessResults = isSpectating ? spectatedGuessResults : guessResults;
+  const activeCurrentGuess = isSpectating ? spectatedPlayer?.currentGuess ?? '' : currentGuess;
+  const activeRevealedRows = isSpectating ? spectatedRevealedRows : revealedRows;
+  const activeRevealingRowIndex = isSpectating ? spectatedRevealingRowIndex : revealingRowIndex;
+  const activeRevealingTiles = isSpectating ? spectatedRevealingTiles : revealingTiles;
+  const keyStates = getKeyboardState(isSpectating ? spectatedVisibleGuessResults : visibleGuessResults);
   const isPlaying = currentPlayer?.gameStatus === 'playing';
   const hasFinished = currentPlayer?.gameStatus === 'won' || currentPlayer?.gameStatus === 'lost';
   const hasPendingReveal = revealingRowIndex !== null || revealedRows < guessResults.length;
-  const canType = isPlaying && !hasPendingReveal && !isSubmittingGuess;
+  const canType = !isSpectating && isPlaying && !hasPendingReveal && !isSubmittingGuess;
   const readyPlayers = room?.players.filter((player) => player.readyForNextRound).length || 0;
+
+  const startSpectating = useCallback(
+    (targetPlayerId: string) => {
+      const targetPlayer = otherPlayers.find((player) => player.id === targetPlayerId);
+      if (!targetPlayer) {
+        return;
+      }
+
+      const nextCount = targetPlayer.guessResults.length;
+      spectatedLastGuessCountRef.current = nextCount;
+      setSpectatedRevealedRows(nextCount);
+      setSpectatedRevealingRowIndex(null);
+      setSpectatedRevealingTiles(0);
+      setSpectatedPlayerId(targetPlayerId);
+    },
+    [otherPlayers],
+  );
+
+  useEffect(() => {
+    if (!spectatedPlayerId) {
+      return;
+    }
+
+    const stillExists = room?.players.some((player) => player.id === spectatedPlayerId && player.id !== playerId);
+    if (!stillExists) {
+      setSpectatedPlayerId(null);
+    }
+  }, [room, playerId, spectatedPlayerId]);
+
+  useEffect(() => {
+    const nextCount = spectatedGuessResults.length;
+    const previousCount = spectatedLastGuessCountRef.current;
+    const scheduleStateUpdate = (update: () => void) => window.requestAnimationFrame(update);
+
+    if (nextCount === previousCount) {
+      return;
+    }
+
+    if (nextCount === 0) {
+      spectatedLastGuessCountRef.current = 0;
+      const resetFrame = scheduleStateUpdate(() => {
+        setSpectatedRevealedRows(0);
+        setSpectatedRevealingRowIndex(null);
+        setSpectatedRevealingTiles(0);
+      });
+      return () => {
+        window.cancelAnimationFrame(resetFrame);
+      };
+    }
+
+    if (nextCount < previousCount) {
+      spectatedLastGuessCountRef.current = nextCount;
+      const rollbackFrame = scheduleStateUpdate(() => {
+        setSpectatedRevealedRows(nextCount);
+        setSpectatedRevealingRowIndex(null);
+        setSpectatedRevealingTiles(0);
+      });
+      return () => {
+        window.cancelAnimationFrame(rollbackFrame);
+      };
+    }
+
+    spectatedLastGuessCountRef.current = nextCount;
+    const startFrame = scheduleStateUpdate(() => {
+      setSpectatedRevealingRowIndex(nextCount - 1);
+      setSpectatedRevealingTiles(0);
+    });
+
+    let revealed = 0;
+    let finalizeTimeout: number | undefined;
+    const revealInterval = window.setInterval(() => {
+      revealed += 1;
+      setSpectatedRevealingTiles(revealed);
+
+      if (revealed >= 5) {
+        window.clearInterval(revealInterval);
+        finalizeTimeout = window.setTimeout(() => {
+          setSpectatedRevealedRows(nextCount);
+          setSpectatedRevealingRowIndex(null);
+          setSpectatedRevealingTiles(0);
+        }, 140);
+      }
+    }, 250);
+
+    return () => {
+      window.cancelAnimationFrame(startFrame);
+      window.clearInterval(revealInterval);
+      if (finalizeTimeout) {
+        window.clearTimeout(finalizeTimeout);
+      }
+    };
+  }, [spectatedGuessResults.length]);
 
   useEffect(() => {
     const nextCount = guessResults.length;
@@ -133,6 +264,7 @@ export default function Game() {
         .then((result) => {
           if (result.success) {
             setCurrentGuess('');
+            updateCurrentGuess('');
             clearError();
             return;
           }
@@ -149,12 +281,20 @@ export default function Game() {
         });
     } else if (key === 'Backspace') {
       clearError();
-      setCurrentGuess(prev => prev.slice(0, -1));
+      setCurrentGuess((prev) => {
+        const nextGuess = prev.slice(0, -1);
+        updateCurrentGuess(nextGuess);
+        return nextGuess;
+      });
     } else if (/^[A-Za-z]$/.test(key) && currentGuess.length < 5) {
       clearError();
-      setCurrentGuess(prev => prev + key.toUpperCase());
+      setCurrentGuess((prev) => {
+        const nextGuess = prev + key.toUpperCase();
+        updateCurrentGuess(nextGuess);
+        return nextGuess;
+      });
     }
-  }, [currentGuess, canType, submitGuess, clearError]);
+  }, [currentGuess, canType, submitGuess, updateCurrentGuess, clearError]);
 
   useEffect(() => {
     return () => {
@@ -224,8 +364,11 @@ export default function Game() {
               <MiniGrid
                 key={player.id}
                 guessResults={player.guessResults}
+                currentGuess={player.currentGuess}
                 playerName={player.name}
                 gameStatus={player.gameStatus}
+                onSelect={() => startSpectating(player.id)}
+                isSelected={player.id === spectatedPlayerId}
               />
             ))}
           </div>
@@ -233,12 +376,27 @@ export default function Game() {
 
         <div className="flex min-h-0 w-full max-w-xl flex-1 flex-col items-center justify-between gap-3">
           <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-start gap-3 sm:justify-center">
-            {hasFinished && !hasPendingReveal && currentPlayer.gameStatus === 'won' && (
+            {isSpectating && spectatedPlayer && (
+              <div className="flex flex-wrap items-center justify-center gap-2 rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-100">
+                <span>
+                  Spectating <span className="font-semibold">{spectatedPlayer.name}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSpectatedPlayerId(null)}
+                  className="rounded bg-zinc-700 px-2 py-1 text-xs font-semibold text-white hover:bg-zinc-600"
+                >
+                  Stop spectating
+                </button>
+              </div>
+            )}
+
+            {!isSpectating && hasFinished && !hasPendingReveal && currentPlayer.gameStatus === 'won' && (
               <div className="rounded-lg bg-green-600 px-4 py-2 text-center text-lg font-bold text-white">
                 🎉 You Won! 🎉
               </div>
             )}
-            {hasFinished && !hasPendingReveal && currentPlayer.gameStatus === 'lost' && (
+            {!isSpectating && hasFinished && !hasPendingReveal && currentPlayer.gameStatus === 'lost' && (
               <div className="rounded-lg bg-red-600 px-4 py-2 text-center text-lg font-bold text-white">
                 😢 Game Over - The word was: {revealedWord || '?????'}
               </div>
@@ -246,11 +404,11 @@ export default function Game() {
 
             <div className={`${shake ? 'animate-shake' : ''} px-1`}>
               <Grid
-                guessResults={guessResults}
-                currentGuess={currentGuess}
-                revealedRows={revealedRows}
-                revealingRowIndex={revealingRowIndex}
-                revealingTiles={revealingTiles}
+                guessResults={activeGuessResults}
+                currentGuess={activeCurrentGuess}
+                revealedRows={activeRevealedRows}
+                revealingRowIndex={activeRevealingRowIndex}
+                revealingTiles={activeRevealingTiles}
               />
             </div>
           </div>
@@ -261,7 +419,7 @@ export default function Game() {
             disabled={!canType}
           />
 
-          {hasFinished && !hasPendingReveal && (
+          {!isSpectating && hasFinished && !hasPendingReveal && (
             <div className="mb-1 flex flex-col items-center gap-3 pb-1">
               <p className="text-sm text-zinc-300">
                 {readyPlayers}/{room.players.length} players ready to play again
@@ -294,8 +452,11 @@ export default function Game() {
                 <MiniGrid
                   key={player.id}
                   guessResults={player.guessResults}
+                  currentGuess={player.currentGuess}
                   playerName={player.name}
                   gameStatus={player.gameStatus}
+                  onSelect={() => startSpectating(player.id)}
+                  isSelected={player.id === spectatedPlayerId}
                 />
               ))}
             </div>

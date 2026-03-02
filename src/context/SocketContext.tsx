@@ -20,6 +20,7 @@ interface SocketContextType {
   createRoom: (playerName: string) => Promise<CreateRoomResult>;
   joinRoom: (roomId: string, playerName: string) => Promise<JoinRoomResult>;
   startGame: () => void;
+  updateCurrentGuess: (guess: string) => void;
   submitGuess: (guess: string) => Promise<ActionResult>;
   playAgain: () => Promise<ActionResult>;
   leaveRoom: () => void;
@@ -164,6 +165,15 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     socket.emit('startGame');
   }, []);
 
+  const updateCurrentGuess = useCallback((guess: string) => {
+    const socket = getSocket();
+    if (!socket.connected) {
+      return;
+    }
+
+    socket.emit('updateCurrentGuess', guess);
+  }, []);
+
   const submitGuess = useCallback((guess: string): Promise<ActionResult> => {
     return new Promise((resolve) => {
       const socket = getSocket();
@@ -209,6 +219,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     createRoom,
     joinRoom,
     startGame,
+    updateCurrentGuess,
     submitGuess,
     playAgain,
     leaveRoom,
@@ -222,6 +233,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     createRoom,
     joinRoom,
     startGame,
+    updateCurrentGuess,
     submitGuess,
     playAgain,
     leaveRoom,

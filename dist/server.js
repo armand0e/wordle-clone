@@ -28,6 +28,7 @@ function startRound(room) {
     room.gameStarted = true;
     room.players.forEach((player) => {
         player.guesses = [];
+        player.currentGuess = '';
         player.guessResults = [];
         player.gameStatus = 'playing';
         player.readyForNextRound = false;
@@ -55,6 +56,7 @@ app.prepare().then(() => {
                 id: socket.id,
                 name: playerName.trim().slice(0, 20) || 'Player',
                 guesses: [],
+                currentGuess: '',
                 gameStatus: 'waiting',
                 guessResults: [],
                 readyForNextRound: false,
@@ -89,9 +91,10 @@ app.prepare().then(() => {
                 id: socket.id,
                 name: playerName.trim().slice(0, 20) || 'Player',
                 guesses: [],
-                gameStatus: 'waiting',
+                currentGuess: '',
+                gameStatus: room.gameStarted ? 'playing' : 'waiting',
                 guessResults: [],
-                readyForNextRound: room.gameStarted,
+                readyForNextRound: false,
             };
             room.players.push(player);
             playerRooms.set(socket.id, roomId.toUpperCase());
@@ -117,6 +120,28 @@ app.prepare().then(() => {
             }
             startRound(room);
             console.log(`Game started in room ${roomId}, word: ${room.targetWord}`);
+            io.to(roomId).emit('roomState', toClientRoom(room));
+        });
+        socket.on('updateCurrentGuess', (guess) => {
+            const roomId = playerRooms.get(socket.id);
+            if (!roomId)
+                return;
+            const room = rooms.get(roomId);
+            if (!room || !room.gameStarted || !room.targetWord) {
+                return;
+            }
+            const player = room.players.find((p) => p.id === socket.id);
+            if (!player || player.gameStatus !== 'playing') {
+                return;
+            }
+            const normalizedGuess = guess.toUpperCase();
+            if (!/^[A-Z]{0,5}$/.test(normalizedGuess)) {
+                return;
+            }
+            if (player.currentGuess === normalizedGuess) {
+                return;
+            }
+            player.currentGuess = normalizedGuess;
             io.to(roomId).emit('roomState', toClientRoom(room));
         });
         socket.on('playAgain', (callback) => {
@@ -183,6 +208,7 @@ app.prepare().then(() => {
             }, 250);
             const results = (0, game_1.evaluateGuess)(upperGuess, room.targetWord);
             player.guesses.push(upperGuess);
+            player.currentGuess = '';
             player.guessResults.push(results);
             player.readyForNextRound = false;
             callback(true);

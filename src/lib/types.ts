@@ -16,6 +16,7 @@ export interface Player {
   id: string;
   name: string;
   guesses: string[];
+  currentGuess: string;
   gameStatus: 'waiting' | 'playing' | 'won' | 'lost';
   guessResults: LetterResult[][];
   readyForNextRound: boolean;
@@ -46,6 +47,7 @@ export interface ClientToServerEvents {
   createRoom: (playerName: string, callback: (roomId: string) => void) => void;
   joinRoom: (roomId: string, playerName: string, callback: (success: boolean, error?: string) => void) => void;
   startGame: () => void;
+  updateCurrentGuess: (guess: string) => void;
   submitGuess: (guess: string, callback: (success: boolean, error?: string) => void) => void;
   playAgain: (callback: (success: boolean, error?: string) => void) => void;
   leaveRoom: () => void;

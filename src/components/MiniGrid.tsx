@@ -5,8 +5,11 @@ import { LetterResult, LetterState } from '@/lib/types';
 
 interface MiniGridProps {
   guessResults: LetterResult[][];
+  currentGuess: string;
   playerName: string;
   gameStatus: 'waiting' | 'playing' | 'won' | 'lost';
+  onSelect?: () => void;
+  isSelected?: boolean;
   isCurrentPlayer?: boolean;
 }
 
@@ -18,7 +21,15 @@ const stateColors: Record<LetterState, string> = {
   tbd: 'bg-[var(--wordle-key-default)]',
 };
 
-export default function MiniGrid({ guessResults, playerName, gameStatus, isCurrentPlayer }: MiniGridProps) {
+export default function MiniGrid({
+  guessResults,
+  currentGuess,
+  playerName,
+  gameStatus,
+  onSelect,
+  isSelected = false,
+  isCurrentPlayer,
+}: MiniGridProps) {
   const [revealedRows, setRevealedRows] = useState(guessResults.length);
   const [revealingRowIndex, setRevealingRowIndex] = useState<number | null>(null);
   const [revealingTiles, setRevealingTiles] = useState(0);
@@ -100,8 +111,15 @@ export default function MiniGrid({ guessResults, playerName, gameStatus, isCurre
       : '😢'
     : '';
 
-  return (
-    <div className={`bg-zinc-800 rounded-lg p-3 ${isCurrentPlayer ? 'ring-2 ring-blue-500' : ''}`}>
+  const containerClasses = [
+    'bg-zinc-800 rounded-lg p-3 text-left',
+    isCurrentPlayer ? 'ring-2 ring-blue-500' : '',
+    isSelected ? 'ring-2 ring-yellow-400' : '',
+    onSelect ? 'cursor-pointer transition-colors hover:bg-zinc-700/80' : '',
+  ].join(' ');
+
+  const content = (
+    <>
       <div className="flex items-center justify-between mb-2">
         <span className="text-white text-sm font-medium truncate max-w-[100px]">
           {playerName} {isCurrentPlayer && '(You)'}
@@ -115,11 +133,17 @@ export default function MiniGrid({ guessResults, playerName, gameStatus, isCurre
             <div key={rowIndex} className="grid grid-cols-5 gap-0.5">
               {Array.from({ length: 5 }).map((_, colIndex) => {
                 const result = guess?.[colIndex];
+                const isCurrentGuessRow = rowIndex === guessResults.length && rowIndex < 6;
+                const hasCurrentLetter = isCurrentGuessRow && Boolean(currentGuess[colIndex]);
                 const isFullyRevealed = rowIndex < revealedRows;
                 const isRevealingRow = rowIndex === revealingRowIndex;
                 const isRevealedTile = isRevealingRow && colIndex < revealingTiles;
                 const shouldReveal = isFullyRevealed || isRevealedTile;
-                const state: LetterState = result ? (shouldReveal ? result.state : 'tbd') : 'empty';
+                const state: LetterState = result
+                  ? (shouldReveal ? result.state : 'tbd')
+                  : hasCurrentLetter
+                    ? 'tbd'
+                    : 'empty';
                 return (
                   <div
                     key={colIndex}
@@ -131,6 +155,21 @@ export default function MiniGrid({ guessResults, playerName, gameStatus, isCurre
           );
         })}
       </div>
-    </div>
+    </>
   );
+
+  if (onSelect) {
+    return (
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-label={`Spectate ${playerName}`}
+        className={containerClasses}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={containerClasses}>{content}</div>;
 }
