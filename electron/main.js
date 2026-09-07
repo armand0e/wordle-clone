@@ -1,13 +1,17 @@
-const { app, BrowserWindow, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
 const path = require('path');
 const http = require('http');
+const https = require('https');
 const net = require('net');
 
 const appRoot = path.join(__dirname, '..');
+const CLOUD_URL = process.env.WORDLE_CLOUD_URL || 'https://wordle.armand0e.com';
 const PREFERRED_PORT = parseInt(process.env.WORDLE_PORT || '34787', 10);
 
 let mainWindow = null;
-let serverPort = PREFERRED_PORT;
+let serverPort = null;
+let localServerStarted = false;
+let currentMode = null; // 'online' | 'offline'
 
 // The bundled server binds the preferred port when free, otherwise any free one.
 function pickPort(preferred) {
@@ -46,6 +50,78 @@ function waitForServer(port, timeoutMs = 30000) {
   });
 }
 
+function cloudReachable(timeoutMs = 4000) {
+  return new Promise((resolve) => {
+    const req = https.get(CLOUD_URL, { timeout: timeoutMs }, (res) => {
+      res.resume();
+      resolve(res.statusCode !== undefined && res.statusCode < 500);
+    });
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on('error', () => resolve(false));
+  });
+}
+
+async function ensureLocalServer() {
+  if (localServerStarted) return serverPort;
+
+  serverPort = await pickPort(PREFERRED_PORT);
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = String(serverPort);
+  // The Next.js server resolves its project dir from cwd.
+  process.chdir(appRoot);
+  require(path.join(appRoot, 'dist', 'server.js'));
+  await waitForServer(serverPort);
+  localServerStarted = true;
+  return serverPort;
+}
+
+async function loadOnline() {
+  if (!mainWindow) return;
+  currentMode = 'online';
+  await mainWindow.loadURL(CLOUD_URL).catch(() => {});
+}
+
+async function loadOffline() {
+  if (!mainWindow) return;
+  currentMode = 'offline';
+  try {
+    const port = await ensureLocalServer();
+    await mainWindow.loadURL(`http://127.0.0.1:${port}`).catch(() => {});
+  } catch (err) {
+    dialog.showErrorBox('Wordle Party failed to start', String(err?.stack || err));
+    app.quit();
+  }
+}
+
+function buildMenu() {
+  const template = [
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
+    {
+      label: 'Game',
+      submenu: [
+        {
+          label: 'Play Online (cloud rooms)',
+          click: () => loadOnline(),
+        },
+        {
+          label: 'Play Offline (local only)',
+          click: () => loadOffline(),
+        },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'quit' },
+      ],
+    },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1100,
@@ -65,11 +141,17 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // If the cloud page fails to load (offline, tunnel down), fall back to the
+  // bundled local server.
+  mainWindow.webContents.on('did-fail-load', (_event, _code, _desc, validatedURL, isMainFrame) => {
+    if (isMainFrame && currentMode === 'online' && validatedURL.startsWith(CLOUD_URL)) {
+      loadOffline();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-
-  mainWindow.loadURL(`http://127.0.0.1:${serverPort}`);
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -84,24 +166,23 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
-    try {
-      serverPort = await pickPort(PREFERRED_PORT);
-      process.env.NODE_ENV = 'production';
-      process.env.PORT = String(serverPort);
-      // The Next.js server resolves its project dir from cwd.
-      process.chdir(appRoot);
-      require(path.join(appRoot, 'dist', 'server.js'));
-      await waitForServer(serverPort);
-      createWindow();
-    } catch (err) {
-      dialog.showErrorBox('Wordle Party failed to start', String(err?.stack || err));
-      app.quit();
+    buildMenu();
+    createWindow();
+    if (await cloudReachable()) {
+      await loadOnline();
+    } else {
+      await loadOffline();
     }
   });
 
   app.on('activate', () => {
     if (mainWindow === null && app.isReady()) {
       createWindow();
+      if (currentMode === 'offline') {
+        loadOffline();
+      } else {
+        loadOnline();
+      }
     }
   });
 
