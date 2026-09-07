@@ -14,6 +14,7 @@ files:
   - next.config.ts
 mac:
   category: public.app-category.games
+  artifactName: "${productName}-${version}-${arch}.${ext}"
   target:
     - target: dmg
       arch:
