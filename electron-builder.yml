@@ -1,0 +1,22 @@
+appId: com.armand0e.wordle-party
+productName: Wordle Party
+asar: false
+npmRebuild: false
+directories:
+  output: release
+files:
+  - electron/**/*
+  - dist/**/*
+  - ".next/**/*"
+  - "!.next/cache/**"
+  - public/**/*
+  - src/lib/**/*
+  - next.config.ts
+mac:
+  category: public.app-category.games
+  target:
+    - dmg
+    - zip
+win:
+  target:
+    - portable

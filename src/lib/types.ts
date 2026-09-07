@@ -20,6 +20,7 @@ export interface Player {
   gameStatus: 'waiting' | 'playing' | 'won' | 'lost';
   guessResults: LetterResult[][];
   readyForNextRound: boolean;
+  connected: boolean;
 }
 
 export interface Room {
@@ -44,8 +45,8 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
-  createRoom: (playerName: string, callback: (roomId: string) => void) => void;
-  joinRoom: (roomId: string, playerName: string, callback: (success: boolean, error?: string) => void) => void;
+  createRoom: (playerName: string, playerToken: string, callback: (roomId: string) => void) => void;
+  joinRoom: (roomId: string, playerName: string, playerToken: string, callback: (success: boolean, error?: string) => void) => void;
   startGame: () => void;
   updateCurrentGuess: (guess: string) => void;
   submitGuess: (guess: string, callback: (success: boolean, error?: string) => void) => void;

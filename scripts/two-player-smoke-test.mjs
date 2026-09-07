@@ -60,7 +60,7 @@ function emitAck(socket, event, ...args) {
 function createRoom(socket, playerName) {
   return withTimeout(
     new Promise((resolve) => {
-      socket.emit('createRoom', playerName, (roomId) => resolve(roomId));
+      socket.emit('createRoom', playerName, `smoke-${playerName}-token`, (roomId) => resolve(roomId));
     }),
     'createRoom',
   );
@@ -118,7 +118,7 @@ async function main() {
   try {
     const roomId = await createRoom(socketA, 'SmokeA');
 
-    const [joinSuccess, joinError] = await emitAck(socketB, 'joinRoom', roomId, 'SmokeB');
+    const [joinSuccess, joinError] = await emitAck(socketB, 'joinRoom', roomId, 'SmokeB', 'smoke-SmokeB-token');
     if (!joinSuccess) {
       throw new Error(`joinRoom failed: ${joinError || 'unknown error'}`);
     }

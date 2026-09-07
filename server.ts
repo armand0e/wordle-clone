@@ -10,12 +10,26 @@ const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
 const port = parseInt(process.env.PORT || '3000', 10);
 
+// How long a disconnected player keeps their seat (mobile browsers kill the
+// socket as soon as the tab is backgrounded, e.g. while sending an invite).
+const DISCONNECT_GRACE_MS = 5 * 60 * 1000;
+
 const app = next({ dev, hostname, port });
 const handler = app.getRequestHandler();
 
 const rooms: Map<string, Room> = new Map();
-const playerRooms: Map<string, string> = new Map(); // socketId -> roomId
+const playerRooms: Map<string, string> = new Map(); // playerId -> roomId
+const playerSockets: Map<string, string> = new Map(); // playerId -> socketId
+const socketPlayers: Map<string, string> = new Map(); // socketId -> playerId
+const removalTimers: Map<string, NodeJS.Timeout> = new Map(); // playerId -> pending removal
 const guessSubmitLocks: Set<string> = new Set();
+
+function resolvePlayerId(playerToken: unknown): string {
+  if (typeof playerToken === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(playerToken)) {
+    return playerToken;
+  }
+  return uuidv4();
+}
 
 function toClientRoomForPlayer(room: Room, viewerId: string): Room {
   const viewer = room.players.find((player) => player.id === viewerId);
@@ -70,15 +84,70 @@ app.prepare().then(() => {
 
   const emitRoomState = (room: Room) => {
     room.players.forEach((player) => {
-      io.to(player.id).emit('roomState', toClientRoomForPlayer(room, player.id));
+      const socketId = playerSockets.get(player.id);
+      if (socketId) {
+        io.to(socketId).emit('roomState', toClientRoomForPlayer(room, player.id));
+      }
     });
+  };
+
+  const cancelRemoval = (playerId: string) => {
+    const timer = removalTimers.get(playerId);
+    if (timer) {
+      clearTimeout(timer);
+      removalTimers.delete(playerId);
+    }
+  };
+
+  const removePlayer = (playerId: string) => {
+    cancelRemoval(playerId);
+    guessSubmitLocks.delete(playerId);
+
+    const roomId = playerRooms.get(playerId);
+    if (!roomId) return;
+
+    playerRooms.delete(playerId);
+
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    room.players = room.players.filter((p) => p.id !== playerId);
+
+    if (room.players.length === 0) {
+      rooms.delete(roomId);
+      console.log(`Room ${roomId} deleted (empty)`);
+    } else {
+      if (room.hostId === playerId) {
+        const nextHost = room.players.find((p) => p.connected) ?? room.players[0];
+        room.hostId = nextHost.id;
+      }
+      emitRoomState(room);
+      io.to(roomId).emit('playerLeft', playerId);
+    }
+  };
+
+  const maybeStartNextRound = (room: Room) => {
+    const connectedPlayers = room.players.filter((p) => p.connected);
+    const everyoneReady =
+      connectedPlayers.length > 0 && connectedPlayers.every((p) => p.readyForNextRound);
+    if (everyoneReady) {
+      startRound(room);
+      emitRoomState(room);
+    }
   };
 
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
-    socket.on('createRoom', (playerName, callback) => {
-      handleDisconnect(socket.id);
+    const bindSocket = (playerId: string) => {
+      socketPlayers.set(socket.id, playerId);
+      playerSockets.set(playerId, socket.id);
+      cancelRemoval(playerId);
+    };
+
+    socket.on('createRoom', (playerName, playerToken, callback) => {
+      const playerId = resolvePlayerId(playerToken);
+      removePlayer(playerId);
 
       let roomId = uuidv4().substring(0, 6).toUpperCase();
       while (rooms.has(roomId)) {
@@ -86,13 +155,14 @@ app.prepare().then(() => {
       }
 
       const player: Player = {
-        id: socket.id,
+        id: playerId,
         name: playerName.trim().slice(0, 20) || 'Player',
         guesses: [],
         currentGuess: '',
         gameStatus: 'waiting',
         guessResults: [],
         readyForNextRound: false,
+        connected: true,
       };
 
       const room: Room = {
@@ -100,12 +170,13 @@ app.prepare().then(() => {
         players: [player],
         targetWord: null,
         gameStarted: false,
-        hostId: socket.id,
+        hostId: playerId,
         createdAt: Date.now(),
       };
 
       rooms.set(roomId, room);
-      playerRooms.set(socket.id, roomId);
+      playerRooms.set(playerId, roomId);
+      bindSocket(playerId);
       socket.join(roomId);
 
       console.log(`Room ${roomId} created by ${player.name}`);
@@ -113,15 +184,34 @@ app.prepare().then(() => {
       emitRoomState(room);
     });
 
-    socket.on('joinRoom', (roomId, playerName, callback) => {
-      handleDisconnect(socket.id);
-
-      const room = rooms.get(roomId.toUpperCase());
+    socket.on('joinRoom', (roomId, playerName, playerToken, callback) => {
+      const playerId = resolvePlayerId(playerToken);
+      const normalizedRoomId = roomId.toUpperCase();
+      const room = rooms.get(normalizedRoomId);
 
       if (!room) {
         callback(false, 'Room not found');
         return;
       }
+
+      const existing = room.players.find((p) => p.id === playerId);
+      if (existing) {
+        // Reconnecting player reclaims their seat and board.
+        existing.connected = true;
+        if (playerName.trim()) {
+          existing.name = playerName.trim().slice(0, 20);
+        }
+        playerRooms.set(playerId, normalizedRoomId);
+        bindSocket(playerId);
+        socket.join(normalizedRoomId);
+
+        console.log(`${existing.name} rejoined room ${normalizedRoomId}`);
+        callback(true);
+        emitRoomState(room);
+        return;
+      }
+
+      removePlayer(playerId);
 
       if (room.players.length >= 8) {
         callback(false, 'Room is full');
@@ -129,33 +219,38 @@ app.prepare().then(() => {
       }
 
       const player: Player = {
-        id: socket.id,
+        id: playerId,
         name: playerName.trim().slice(0, 20) || 'Player',
         guesses: [],
         currentGuess: '',
         gameStatus: room.gameStarted ? 'playing' : 'waiting',
         guessResults: [],
         readyForNextRound: false,
+        connected: true,
       };
 
       room.players.push(player);
-      playerRooms.set(socket.id, roomId.toUpperCase());
-      socket.join(roomId.toUpperCase());
+      playerRooms.set(playerId, normalizedRoomId);
+      bindSocket(playerId);
+      socket.join(normalizedRoomId);
 
-      console.log(`${player.name} joined room ${roomId}`);
+      console.log(`${player.name} joined room ${normalizedRoomId}`);
       callback(true);
 
       emitRoomState(room);
     });
 
     socket.on('startGame', () => {
-      const roomId = playerRooms.get(socket.id);
+      const playerId = socketPlayers.get(socket.id);
+      if (!playerId) return;
+
+      const roomId = playerRooms.get(playerId);
       if (!roomId) return;
 
       const room = rooms.get(roomId);
       if (!room) return;
 
-      if (room.hostId !== socket.id) {
+      if (room.hostId !== playerId) {
         socket.emit('error', 'Only the host can start the game');
         return;
       }
@@ -172,7 +267,10 @@ app.prepare().then(() => {
     });
 
     socket.on('updateCurrentGuess', (guess) => {
-      const roomId = playerRooms.get(socket.id);
+      const playerId = socketPlayers.get(socket.id);
+      if (!playerId) return;
+
+      const roomId = playerRooms.get(playerId);
       if (!roomId) return;
 
       const room = rooms.get(roomId);
@@ -180,7 +278,7 @@ app.prepare().then(() => {
         return;
       }
 
-      const player = room.players.find((p) => p.id === socket.id);
+      const player = room.players.find((p) => p.id === playerId);
       if (!player || player.gameStatus !== 'playing') {
         return;
       }
@@ -199,7 +297,13 @@ app.prepare().then(() => {
     });
 
     socket.on('playAgain', (callback) => {
-      const roomId = playerRooms.get(socket.id);
+      const playerId = socketPlayers.get(socket.id);
+      if (!playerId) {
+        callback(false, 'Room not found');
+        return;
+      }
+
+      const roomId = playerRooms.get(playerId);
       if (!roomId) {
         callback(false, 'Room not found');
         return;
@@ -211,7 +315,7 @@ app.prepare().then(() => {
         return;
       }
 
-      const player = room.players.find((p) => p.id === socket.id);
+      const player = room.players.find((p) => p.id === playerId);
       if (!player) {
         callback(false, 'Player not found');
         return;
@@ -224,18 +328,19 @@ app.prepare().then(() => {
 
       player.readyForNextRound = true;
       emitRoomState(room);
-
-      const everyoneReady = room.players.length > 0 && room.players.every((p) => p.readyForNextRound);
-      if (everyoneReady) {
-        startRound(room);
-        emitRoomState(room);
-      }
+      maybeStartNextRound(room);
 
       callback(true);
     });
 
     socket.on('submitGuess', (guess, callback) => {
-      const roomId = playerRooms.get(socket.id);
+      const playerId = socketPlayers.get(socket.id);
+      if (!playerId) {
+        callback(false, 'Room not found');
+        return;
+      }
+
+      const roomId = playerRooms.get(playerId);
       if (!roomId) {
         callback(false, 'Room not found');
         return;
@@ -247,7 +352,7 @@ app.prepare().then(() => {
         return;
       }
 
-      const player = room.players.find((p) => p.id === socket.id);
+      const player = room.players.find((p) => p.id === playerId);
       if (!player || player.gameStatus !== 'playing') {
         callback(false, 'Game already finished');
         return;
@@ -265,14 +370,14 @@ app.prepare().then(() => {
         return;
       }
 
-      if (guessSubmitLocks.has(socket.id)) {
+      if (guessSubmitLocks.has(playerId)) {
         callback(true);
         return;
       }
 
-      guessSubmitLocks.add(socket.id);
+      guessSubmitLocks.add(playerId);
       setTimeout(() => {
-        guessSubmitLocks.delete(socket.id);
+        guessSubmitLocks.delete(playerId);
       }, 250);
 
       const results = evaluateGuess(upperGuess, room.targetWord);
@@ -285,11 +390,11 @@ app.prepare().then(() => {
       // Check if won
       if (upperGuess === room.targetWord) {
         player.gameStatus = 'won';
-        io.to(roomId).emit('playerWon', socket.id);
+        io.to(roomId).emit('playerWon', playerId);
         socket.emit('wordRevealed', room.targetWord);
       } else if (player.guesses.length >= 6) {
         player.gameStatus = 'lost';
-        io.to(roomId).emit('playerLost', socket.id);
+        io.to(roomId).emit('playerLost', playerId);
         socket.emit('wordRevealed', room.targetWord);
       }
 
@@ -297,40 +402,54 @@ app.prepare().then(() => {
     });
 
     socket.on('leaveRoom', () => {
-      handleDisconnect(socket.id);
+      const playerId = socketPlayers.get(socket.id);
+      if (!playerId) return;
+
+      const roomId = playerRooms.get(playerId);
+      if (roomId) {
+        socket.leave(roomId);
+      }
+      removePlayer(playerId);
     });
 
     socket.on('disconnect', () => {
       console.log('Client disconnected:', socket.id);
-      handleDisconnect(socket.id);
-    });
 
-    function handleDisconnect(socketId: string) {
-      guessSubmitLocks.delete(socketId);
+      const playerId = socketPlayers.get(socket.id);
+      socketPlayers.delete(socket.id);
+      if (!playerId) return;
 
-      const roomId = playerRooms.get(socketId);
+      // Only clear the mapping if it still points at this socket — the player
+      // may have already reconnected on a newer socket.
+      if (playerSockets.get(playerId) !== socket.id) return;
+      playerSockets.delete(playerId);
+
+      const roomId = playerRooms.get(playerId);
       if (!roomId) return;
-
-      socket.leave(roomId);
 
       const room = rooms.get(roomId);
       if (!room) return;
 
-      room.players = room.players.filter((p) => p.id !== socketId);
-      playerRooms.delete(socketId);
+      const player = room.players.find((p) => p.id === playerId);
+      if (!player) return;
 
-      if (room.players.length === 0) {
-        rooms.delete(roomId);
-        console.log(`Room ${roomId} deleted (empty)`);
-      } else {
-        // If host left, assign new host
-        if (room.hostId === socketId) {
-          room.hostId = room.players[0].id;
+      player.connected = false;
+      emitRoomState(room);
+
+      cancelRemoval(playerId);
+      const timer = setTimeout(() => {
+        removalTimers.delete(playerId);
+        if (!playerSockets.has(playerId)) {
+          console.log(`Removing ${player.name} after disconnect grace period`);
+          removePlayer(playerId);
+          const currentRoom = rooms.get(roomId);
+          if (currentRoom) {
+            maybeStartNextRound(currentRoom);
+          }
         }
-        emitRoomState(room);
-        io.to(roomId).emit('playerLeft', socketId);
-      }
-    }
+      }, DISCONNECT_GRACE_MS);
+      removalTimers.set(playerId, timer);
+    });
   });
 
   httpServer.listen(port, () => {

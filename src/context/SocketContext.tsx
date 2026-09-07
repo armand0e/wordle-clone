@@ -29,6 +29,51 @@ interface SocketContextType {
 
 const SocketContext = createContext<SocketContextType | null>(null);
 
+const PLAYER_TOKEN_KEY = 'wordle:playerToken';
+const LAST_ROOM_KEY = 'wordle:lastRoom';
+
+// Stable per-browser identity so the server can recognize us across
+// reconnects (mobile browsers drop the socket whenever the tab is backgrounded).
+function getPlayerToken(): string {
+  if (typeof window === 'undefined') return '';
+
+  let token = window.localStorage.getItem(PLAYER_TOKEN_KEY);
+  if (!token || !/^[A-Za-z0-9_-]{8,64}$/.test(token)) {
+    token = crypto.randomUUID();
+    window.localStorage.setItem(PLAYER_TOKEN_KEY, token);
+  }
+  return token;
+}
+
+interface LastRoom {
+  roomId: string;
+  playerName: string;
+}
+
+function getLastRoom(): LastRoom | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(LAST_ROOM_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.roomId === 'string' && typeof parsed?.playerName === 'string') {
+      return parsed;
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+function setLastRoom(lastRoom: LastRoom | null) {
+  if (typeof window === 'undefined') return;
+  if (lastRoom) {
+    window.localStorage.setItem(LAST_ROOM_KEY, JSON.stringify(lastRoom));
+  } else {
+    window.localStorage.removeItem(LAST_ROOM_KEY);
+  }
+}
+
 let globalSocket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
 
 function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> {
@@ -52,13 +97,24 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     const onConnect = () => {
       setIsConnected(true);
-      setPlayerId(socket.id || null);
+      setPlayerId(getPlayerToken());
+
+      // Reclaim our seat if we were in a room before the socket dropped.
+      const lastRoom = getLastRoom();
+      if (lastRoom) {
+        socket.emit('joinRoom', lastRoom.roomId, lastRoom.playerName, getPlayerToken(), (success) => {
+          if (!success) {
+            setLastRoom(null);
+            setRoom(null);
+            setRevealedWord(null);
+          }
+        });
+      }
     };
 
     const onDisconnect = () => {
+      // Keep the room state around — we expect to rejoin on reconnect.
       setIsConnected(false);
-      setRoom(null);
-      setRevealedWord(null);
     };
 
     const onRoomState = (newRoom: Room) => {
@@ -76,6 +132,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     const onWordRevealed = (word: string) => {
       setRevealedWord(word);
     };
+
+    if (socket.connected) {
+      onConnect();
+    }
 
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
@@ -102,7 +162,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      socket.emit('createRoom', playerName, (roomId) => {
+      socket.emit('createRoom', playerName, getPlayerToken(), (roomId) => {
+        setLastRoom({ roomId, playerName });
         resolve({ roomId });
       });
     });
@@ -118,7 +179,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      socket.emit('joinRoom', roomId, playerName, (success, errorMsg) => {
+      socket.emit('joinRoom', roomId, playerName, getPlayerToken(), (success, errorMsg) => {
         if (!success) {
           const message = errorMsg || 'Failed to join room';
           setError(message);
@@ -126,6 +187,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        setLastRoom({ roomId: roomId.toUpperCase(), playerName });
         resolve({ success: true });
       });
     });
@@ -197,6 +259,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const leaveRoom = useCallback(() => {
     const socket = getSocket();
     socket.emit('leaveRoom');
+    setLastRoom(null);
     setRoom(null);
     setRevealedWord(null);
     setError(null);

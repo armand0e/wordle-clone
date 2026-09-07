@@ -27,6 +27,14 @@ body {
   padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 }
 
+/* In-game layout: lock to exactly one viewport so the keyboard stays docked
+   at the bottom and nothing scrolls. */
+.wordle-game-viewport {
+  height: 100dvh;
+  padding-top: max(0.375rem, env(safe-area-inset-top));
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
 .wordle-toast {
   top: max(0.75rem, env(safe-area-inset-top));
 }

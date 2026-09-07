@@ -11,6 +11,7 @@ interface MiniGridProps {
   onSelect?: () => void;
   isSelected?: boolean;
   isCurrentPlayer?: boolean;
+  size?: 'default' | 'compact';
 }
 
 const stateColors: Record<LetterState, string> = {
@@ -29,7 +30,9 @@ export default function MiniGrid({
   onSelect,
   isSelected = false,
   isCurrentPlayer,
+  size = 'default',
 }: MiniGridProps) {
+  const isCompact = size === 'compact';
   const [revealedRows, setRevealedRows] = useState(guessResults.length);
   const [revealingRowIndex, setRevealingRowIndex] = useState<number | null>(null);
   const [revealingTiles, setRevealingTiles] = useState(0);
@@ -112,25 +115,28 @@ export default function MiniGrid({
     : '';
 
   const containerClasses = [
-    'w-fit bg-zinc-800 rounded-lg p-3 text-left',
+    'w-fit shrink-0 bg-zinc-800 rounded-lg text-left',
+    isCompact ? 'p-1' : 'p-3',
     isCurrentPlayer ? 'ring-2 ring-blue-500' : '',
-    isSelected ? 'ring-2 ring-yellow-400' : '',
+    isSelected ? (isCompact ? 'ring-1 ring-yellow-400' : 'ring-2 ring-yellow-400') : '',
     onSelect ? 'cursor-pointer transition-colors hover:bg-zinc-700/80' : '',
   ].join(' ');
 
+  const tileGap = isCompact ? 'gap-px' : 'gap-0.5';
+
   const content = (
     <>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-white text-sm font-medium truncate max-w-[100px]">
+      <div className={`flex items-center justify-between gap-1 ${isCompact ? 'mb-0.5' : 'mb-2'}`}>
+        <span className={`text-white font-medium truncate ${isCompact ? 'text-[9px] leading-3 max-w-[44px]' : 'text-sm max-w-[100px]'}`}>
           {playerName} {isCurrentPlayer && '(You)'}
         </span>
-        <span>{statusIcon}</span>
+        <span className={isCompact ? 'text-[9px] leading-3' : ''}>{statusIcon}</span>
       </div>
-      <div className="grid w-fit gap-0.5">
+      <div className={`grid w-fit ${tileGap}`}>
         {Array.from({ length: 6 }).map((_, rowIndex) => {
           const guess = guessResults[rowIndex];
           return (
-            <div key={rowIndex} className="grid w-fit grid-cols-5 gap-0.5">
+            <div key={rowIndex} className={`grid w-fit grid-cols-5 ${tileGap}`}>
               {Array.from({ length: 5 }).map((_, colIndex) => {
                 const result = guess?.[colIndex];
                 const isCurrentGuessRow = rowIndex === guessResults.length && rowIndex < 6;
@@ -147,7 +153,7 @@ export default function MiniGrid({
                 return (
                   <div
                     key={colIndex}
-                    className={`wordle-tile w-4 h-4 ${stateColors[state]} rounded-sm ${isRevealedTile ? 'animate-flip' : ''}`}
+                    className={`wordle-tile ${isCompact ? 'w-2 h-2 rounded-[2px]' : 'w-4 h-4 rounded-sm'} ${stateColors[state]} ${isRevealedTile ? 'animate-flip' : ''}`}
                   />
                 );
               })}

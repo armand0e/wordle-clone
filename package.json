@@ -1,7 +1,8 @@
 {
-  "name": "windsurf-project",
+  "name": "wordle-party",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "ts-node --project tsconfig.server.json server.ts",
     "build": "npm run build:app && npm run build:server",
@@ -10,7 +11,9 @@
     "start": "node -e \"process.env.NODE_ENV='production';require('./dist/server.js')\"",
     "words:refresh": "python five_letter_list.py",
     "smoke:test:2p": "node scripts/two-player-smoke-test.mjs",
-    "lint": "eslint"
+    "lint": "eslint",
+    "desktop": "electron .",
+    "desktop:build": "npm run build && electron-builder"
   },
   "dependencies": {
     "@radix-ui/colors": "^3.0.0",
@@ -31,6 +34,8 @@
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
     "babel-plugin-react-compiler": "1.0.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4.2.1",

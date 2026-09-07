@@ -355,7 +355,7 @@ export default function Game() {
   }
 
   return (
-    <div className="wordle-viewport relative mx-auto flex w-full max-w-6xl flex-col overflow-y-auto overflow-x-hidden px-3 sm:px-4">
+    <div className="wordle-game-viewport relative mx-auto flex w-full max-w-6xl flex-col overflow-hidden px-2 sm:px-4">
       {error && (
         <div
           role="alert"
@@ -366,7 +366,28 @@ export default function Game() {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 items-stretch justify-center gap-3 py-3 lg:gap-8">
+      {/* Mobile: compact previews of other players in a top bar */}
+      {otherPlayers.length > 0 && (
+        <div className="lg:hidden flex w-full justify-center">
+          <div className="flex max-w-full gap-1.5 overflow-x-auto px-1 py-1">
+            {otherPlayers.map(player => (
+              <MiniGrid
+                key={player.id}
+                size="compact"
+                guessResults={player.guessResults}
+                currentGuess={player.currentGuess}
+                playerName={player.name}
+                gameStatus={player.gameStatus}
+                onSelect={canSpectate ? () => startSpectating(player.id) : undefined}
+                isSelected={player.id === spectatedPlayerId}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex min-h-0 w-full flex-1 items-stretch justify-center gap-3 lg:gap-8">
+        {/* Desktop: full-size previews in a side panel */}
         {otherPlayers.length > 0 && (
           <div className="hidden lg:flex flex-col gap-3 pt-2">
             <h3 className="text-white font-bold text-sm">Other Players</h3>
@@ -384,94 +405,77 @@ export default function Game() {
           </div>
         )}
 
-        <div className="flex min-h-0 w-full max-w-xl flex-1 flex-col items-center justify-between gap-3">
-          <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-start gap-3 sm:justify-center">
-            {isSpectating && spectatedPlayer && (
-              <div className="flex flex-wrap items-center justify-center gap-2 rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-100">
-                <span>
-                  Spectating <span className="font-semibold">{spectatedPlayer.name}</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setSpectatedPlayerId(null)}
-                  className="rounded bg-zinc-700 px-2 py-1 text-xs font-semibold text-white hover:bg-zinc-600"
-                >
-                  Stop spectating
-                </button>
-              </div>
-            )}
-
-            {!isSpectating && hasFinished && !hasPendingReveal && currentPlayer.gameStatus === 'won' && (
-              <div className="rounded-lg bg-green-600 px-4 py-2 text-center text-lg font-bold text-white">
-                🎉 You Won! 🎉
-              </div>
-            )}
-            {!isSpectating && hasFinished && !hasPendingReveal && currentPlayer.gameStatus === 'lost' && (
-              <div className="rounded-lg bg-red-600 px-4 py-2 text-center text-lg font-bold text-white">
-                😢 Game Over - The word was: {revealedWord || '?????'}
-              </div>
-            )}
-
-            <div className={`${shake ? 'animate-shake' : ''} px-1`}>
-              <Grid
-                guessResults={activeGuessResults}
-                currentGuess={activeCurrentGuess}
-                revealedRows={activeRevealedRows}
-                revealingRowIndex={activeRevealingRowIndex}
-                revealingTiles={activeRevealingTiles}
-              />
+        <div className="flex min-h-0 w-full max-w-xl flex-col items-center justify-center gap-2 sm:gap-3">
+          {isSpectating && spectatedPlayer && (
+            <div className="flex flex-wrap items-center justify-center gap-2 rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-100 sm:py-2 sm:text-sm">
+              <span>
+                Spectating <span className="font-semibold">{spectatedPlayer.name}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setSpectatedPlayerId(null)}
+                className="rounded bg-zinc-700 px-2 py-1 text-xs font-semibold text-white hover:bg-zinc-600"
+              >
+                Stop spectating
+              </button>
             </div>
+          )}
+
+          {!isSpectating && hasFinished && !hasPendingReveal && currentPlayer.gameStatus === 'won' && (
+            <div className="rounded-lg bg-green-600 px-3 py-1.5 text-center text-sm font-bold text-white sm:px-4 sm:py-2 sm:text-lg">
+              🎉 You Won! 🎉
+            </div>
+          )}
+          {!isSpectating && hasFinished && !hasPendingReveal && currentPlayer.gameStatus === 'lost' && (
+            <div className="rounded-lg bg-red-600 px-3 py-1.5 text-center text-sm font-bold text-white sm:px-4 sm:py-2 sm:text-lg">
+              😢 Game Over - The word was: {revealedWord || '?????'}
+            </div>
+          )}
+
+          <div className={`${shake ? 'animate-shake' : ''} px-1`}>
+            <Grid
+              guessResults={activeGuessResults}
+              currentGuess={activeCurrentGuess}
+              revealedRows={activeRevealedRows}
+              revealingRowIndex={activeRevealingRowIndex}
+              revealingTiles={activeRevealingTiles}
+            />
           </div>
-
-          <Keyboard
-            keyStates={keyStates}
-            onKeyPress={handleKeyPress}
-            disabled={!canType}
-          />
-
-          {!isSpectating && hasFinished && !hasPendingReveal && (
-            <div className="mb-1 flex flex-col items-center gap-3 pb-1">
-              <p className="text-sm text-zinc-300">
-                {readyPlayers}/{room.players.length} players ready to play again
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <button
-                  onClick={handlePlayAgain}
-                  disabled={currentPlayer.readyForNextRound || isSubmittingRematch}
-                  className={`rounded-md px-4 py-2 font-semibold transition-colors ${
-                    currentPlayer.readyForNextRound
-                      ? 'bg-zinc-700 text-zinc-300'
-                      : 'bg-green-600 text-white hover:bg-green-500'
-                  } ${isSubmittingRematch ? 'opacity-60' : ''}`}
-                >
-                  {currentPlayer.readyForNextRound ? 'Ready' : 'Play Again'}
-                </button>
-                <button
-                  onClick={leaveRoom}
-                  className="rounded-md bg-zinc-700 px-4 py-2 font-semibold text-white hover:bg-zinc-600"
-                >
-                  Leave
-                </button>
-              </div>
-            </div>
-          )}
-
-          {otherPlayers.length > 0 && (
-            <div className="lg:hidden flex flex-wrap justify-center gap-2 pt-1">
-              {otherPlayers.map(player => (
-                <MiniGrid
-                  key={player.id}
-                  guessResults={player.guessResults}
-                  currentGuess={player.currentGuess}
-                  playerName={player.name}
-                  gameStatus={player.gameStatus}
-                  onSelect={canSpectate ? () => startSpectating(player.id) : undefined}
-                  isSelected={player.id === spectatedPlayerId}
-                />
-              ))}
-            </div>
-          )}
         </div>
+      </div>
+
+      {/* Bottom dock: rematch controls + keyboard pinned to the bottom */}
+      <div className="flex w-full flex-col items-center gap-2 pt-2">
+        {!isSpectating && hasFinished && !hasPendingReveal && (
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+            <p className="text-xs text-zinc-300 sm:text-sm">
+              {readyPlayers}/{room.players.length} ready
+            </p>
+            <button
+              onClick={handlePlayAgain}
+              disabled={currentPlayer.readyForNextRound || isSubmittingRematch}
+              className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors sm:px-4 sm:py-2 sm:text-base ${
+                currentPlayer.readyForNextRound
+                  ? 'bg-zinc-700 text-zinc-300'
+                  : 'bg-green-600 text-white hover:bg-green-500'
+              } ${isSubmittingRematch ? 'opacity-60' : ''}`}
+            >
+              {currentPlayer.readyForNextRound ? 'Ready' : 'Play Again'}
+            </button>
+            <button
+              onClick={leaveRoom}
+              className="rounded-md bg-zinc-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-zinc-600 sm:px-4 sm:py-2 sm:text-base"
+            >
+              Leave
+            </button>
+          </div>
+        )}
+
+        <Keyboard
+          keyStates={keyStates}
+          onKeyPress={handleKeyPress}
+          disabled={!canType}
+        />
       </div>
     </div>
   );
