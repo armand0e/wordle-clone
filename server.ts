@@ -1,7 +1,7 @@
 import { createServer } from 'http';
+import { randomUUID } from 'crypto';
 import { Server } from 'socket.io';
 import next from 'next';
-import { v4 as uuidv4 } from 'uuid';
 import { Room, Player, ClientToServerEvents, ServerToClientEvents } from './src/lib/types';
 import { evaluateGuess } from './src/lib/game';
 import { getRandomWord, isValidWord } from './src/lib/words';
@@ -28,7 +28,7 @@ function resolvePlayerId(playerToken: unknown): string {
   if (typeof playerToken === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(playerToken)) {
     return playerToken;
   }
-  return uuidv4();
+  return randomUUID();
 }
 
 function toClientRoomForPlayer(room: Room, viewerId: string): Room {
@@ -149,9 +149,9 @@ app.prepare().then(() => {
       const playerId = resolvePlayerId(playerToken);
       removePlayer(playerId);
 
-      let roomId = uuidv4().substring(0, 6).toUpperCase();
+      let roomId = randomUUID().substring(0, 6).toUpperCase();
       while (rooms.has(roomId)) {
-        roomId = uuidv4().substring(0, 6).toUpperCase();
+        roomId = randomUUID().substring(0, 6).toUpperCase();
       }
 
       const player: Player = {

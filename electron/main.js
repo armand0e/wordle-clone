@@ -50,17 +50,49 @@ function waitForServer(port, timeoutMs = 30000) {
   });
 }
 
+// True only when the cloud URL answers 200 with a page that is actually our
+// app — a captive portal (hotel/airplane wifi) answering with its own page
+// must not count as "online".
 function cloudReachable(timeoutMs = 4000) {
   return new Promise((resolve) => {
+    let settled = false;
+    const done = (value) => {
+      if (!settled) {
+        settled = true;
+        resolve(value);
+      }
+    };
+
     const req = https.get(CLOUD_URL, { timeout: timeoutMs }, (res) => {
-      res.resume();
-      resolve(res.statusCode !== undefined && res.statusCode < 500);
+      if (res.statusCode !== 200) {
+        res.resume();
+        done(false);
+        return;
+      }
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        body += chunk;
+        if (body.includes('Wordle Party')) {
+          req.destroy();
+          done(true);
+        } else if (body.length > 262144) {
+          req.destroy();
+          done(false);
+        }
+      });
+      res.on('end', () => done(body.includes('Wordle Party')));
+      res.on('error', () => done(false));
     });
     req.on('timeout', () => {
       req.destroy();
-      resolve(false);
+      done(false);
     });
-    req.on('error', () => resolve(false));
+    req.on('error', () => done(false));
+    setTimeout(() => {
+      req.destroy();
+      done(false);
+    }, timeoutMs + 1000);
   });
 }
 
@@ -143,8 +175,9 @@ function createWindow() {
 
   // If the cloud page fails to load (offline, tunnel down), fall back to the
   // bundled local server.
-  mainWindow.webContents.on('did-fail-load', (_event, _code, _desc, validatedURL, isMainFrame) => {
-    if (isMainFrame && currentMode === 'online' && validatedURL.startsWith(CLOUD_URL)) {
+  mainWindow.webContents.on('did-fail-load', (_event, code, _desc, validatedURL, isMainFrame) => {
+    // -3 (ERR_ABORTED) is a cancelled navigation, not a network failure.
+    if (isMainFrame && code !== -3 && currentMode === 'online' && validatedURL.startsWith(CLOUD_URL)) {
       loadOffline();
     }
   });
@@ -153,6 +186,21 @@ function createWindow() {
     mainWindow = null;
   });
 }
+
+// Any unexpected failure should surface as a readable dialog, not a silent
+// crash or a raw stack in the console.
+let fatalShown = false;
+function reportFatal(err) {
+  console.error(err);
+  if (fatalShown || !app.isReady()) return;
+  fatalShown = true;
+  dialog.showErrorBox(
+    'Wordle Party hit a problem',
+    `${String(err?.stack || err)}\n\nTry "Game > Play Offline" from the menu, or restart the app.`,
+  );
+}
+process.on('uncaughtException', reportFatal);
+process.on('unhandledRejection', reportFatal);
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
